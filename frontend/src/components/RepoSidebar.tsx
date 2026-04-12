@@ -104,19 +104,6 @@ export default function RepoSidebar({
                           ].join(' ')}
                         />
 
-                        {/* Monogram */}
-                        <span
-                          className={[
-                            'grid h-10 w-10 shrink-0 place-items-center rounded-xl font-serif text-[15px] font-medium',
-                            'transition-all duration-500 ease-silk',
-                            active
-                              ? 'bg-espresso-900 text-cream shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]'
-                              : 'bg-cream-200 text-espresso-700 group-hover/row:bg-cream-300',
-                          ].join(' ')}
-                        >
-                          {repo.name.charAt(0).toUpperCase()}
-                        </span>
-
                         <div className="min-w-0 flex-1">
                           <div
                             className={[
