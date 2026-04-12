@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { resumeSession, summarizeSession } from '../api';
+import { useState, useRef, useEffect } from 'react';
+import { resumeSession, summarizeSession, updateSessionMeta } from '../api';
 import type { Session } from '../types';
 
 interface Props {
@@ -19,12 +19,42 @@ export default function SessionCard({
 }: Props) {
   const [summarizing, setSummarizing] = useState(false);
   const [resuming, setResuming] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const displayName =
     session.customName ||
     session.summary ||
     session.firstPrompt ||
     'Untitled session';
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  const startEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDraft(session.customName || session.summary || session.firstPrompt || '');
+    setEditing(true);
+  };
+
+  const commitEdit = async () => {
+    const next = draft.trim();
+    setEditing(false);
+    if (!next || next === displayName) return;
+    try {
+      await updateSessionMeta(session.sessionId, repoId, { custom_name: next });
+      onUpdate();
+    } catch (err) {
+      console.error('Failed to rename:', err);
+    }
+  };
+
+  const cancelEdit = () => setEditing(false);
 
   const handleResume = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -47,7 +77,8 @@ export default function SessionCard({
       await summarizeSession(session.sessionId, repoId);
       onUpdate();
     } catch (err) {
-      console.error('Failed to summarize:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to rename';
+      onResumed(`AI rename failed: ${msg}`);
     } finally {
       setSummarizing(false);
     }
@@ -67,10 +98,36 @@ export default function SessionCard({
             aria-hidden
           />
 
-          {/* Title */}
-          <p className="pr-2 font-serif text-[15px] font-medium leading-snug tracking-tight text-espresso-900 line-clamp-3">
-            {displayName}
-          </p>
+          {/* Title — click to rename */}
+          {editing ? (
+            <input
+              ref={inputRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commitEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  commitEdit();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  cancelEdit();
+                }
+              }}
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="w-full rounded-lg border border-espresso-900/15 bg-cream-50 px-2 py-1 font-serif text-[15px] font-medium leading-snug tracking-tight text-espresso-900 outline-none focus:border-ochre/50 focus:ring-2 focus:ring-ochre/20"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={startEdit}
+              title="Click to rename"
+              className="block w-full pr-2 text-left font-serif text-[15px] font-medium leading-snug tracking-tight text-espresso-900 line-clamp-3 hover:text-espresso-700"
+            >
+              {displayName}
+            </button>
+          )}
 
           {/* Meta row */}
           <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-espresso-500">
@@ -138,7 +195,7 @@ export default function SessionCard({
               >
                 <path d="M8 2.5 L9.4 6.6 L13.5 8 L9.4 9.4 L8 13.5 L6.6 9.4 L2.5 8 L6.6 6.6 Z" />
               </svg>
-              {summarizing ? 'Distilling…' : 'Summarize'}
+              {summarizing ? 'Renaming…' : 'AI rename'}
             </button>
           </div>
 

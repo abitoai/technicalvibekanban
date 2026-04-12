@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { readdir, readFile, writeFile, stat } from 'fs/promises';
@@ -282,21 +283,20 @@ app.post('/api/sessions/:sessionId/summarize', async (req, res) => {
 
     const filePath = join(PROJECTS_DIR, repoId, `${sessionId}.jsonl`);
 
-    // Read first few user and assistant messages
-    const userMsgs = await readFirstMessages(filePath, 'user', 3);
-    const assistantMsgs = await readFirstMessages(filePath, 'assistant', 3);
-
-    // Build a summary prompt from the conversation
-    const snippets = [];
-    for (const msg of userMsgs) {
-      snippets.push(`User: ${extractText(msg).slice(0, 300)}`);
-    }
-    for (const msg of assistantMsgs) {
-      const text = extractText(msg);
-      if (text) snippets.push(`Assistant: ${text.slice(0, 300)}`);
-    }
-
-    const conversationPreview = snippets.join('\n');
+    // Read the full conversation transcript (all user + assistant text content, in order)
+    const transcriptLines = [];
+    try {
+      const rl = createInterface({ input: createReadStream(filePath), crlfDelay: Infinity });
+      for await (const line of rl) {
+        try {
+          const obj = JSON.parse(line);
+          if (obj.type !== 'user' && obj.type !== 'assistant') continue;
+          const text = extractText(obj);
+          if (text) transcriptLines.push(`${obj.type === 'user' ? 'User' : 'Assistant'}: ${text}`);
+        } catch { /* skip malformed lines */ }
+      }
+    } catch { /* file not readable */ }
+    const transcript = transcriptLines.join('\n\n');
 
     // Call Claude API for summary
     const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -313,16 +313,23 @@ app.post('/api/sessions/:sessionId/summarize', async (req, res) => {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 50,
+        max_tokens: 30,
         messages: [{
           role: 'user',
-          content: `Based on this conversation snippet, generate a short descriptive title (5-8 words max) that summarizes what was done:\n\n${conversationPreview}\n\nTitle:`,
+          content: `Below is a conversation transcript. Respond with 5 or fewer words describing the main point of this chat. No punctuation, no quotes, no prefix — just the title itself.\n\n${transcript}`,
         }],
       }),
     });
 
     const data = await response.json();
-    const summary = data.content?.[0]?.text?.trim() || 'Untitled session';
+    if (!response.ok || !data.content?.[0]?.text) {
+      console.error('Anthropic API error:', response.status, JSON.stringify(data));
+      return res.status(502).json({
+        error: data.error?.message || `Anthropic API returned ${response.status}`,
+        details: data,
+      });
+    }
+    const summary = data.content[0].text.trim();
 
     // Save to meta file
     const metaPath = join(PROJECTS_DIR, repoId, `${sessionId}.meta.json`);
