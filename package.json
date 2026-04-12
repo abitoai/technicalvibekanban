@@ -1,0 +1,13 @@
+{
+  "name": "claude-session-browser",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"cd server && node index.js\" \"cd frontend && npx vite --port 5173\"",
+    "server": "cd server && node index.js",
+    "frontend": "cd frontend && npx vite --port 5173"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
