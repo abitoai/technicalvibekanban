@@ -15,9 +15,10 @@ interface Props {
   skipPermissions: boolean;
   renameWordCount: number;
   onResumed: (message: string) => void;
+  onOpenDigest: () => void;
 }
 
-export default function SessionBoard({ repo, skipPermissions, renameWordCount, onResumed }: Props) {
+export default function SessionBoard({ repo, skipPermissions, renameWordCount, onResumed, onOpenDigest }: Props) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -84,6 +85,33 @@ export default function SessionBoard({ repo, skipPermissions, renameWordCount, o
             <StatTile label="Sessions" value={totals.total} />
             <StatTile label="In flight" value={totals.active} accent />
             <StatTile label="Columns" value={COLUMNS.length} />
+            <button
+              onClick={onOpenDigest}
+              title="Weekly digest across all repos"
+              aria-label="Open weekly digest"
+              className="group/digest relative flex items-center gap-2.5 rounded-2xl border border-espresso-900/10 bg-cream-50 px-4 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] transition-all duration-500 ease-silk hover:shadow-soft-sm active:scale-[0.98]"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                className="h-4 w-4 shrink-0 text-espresso-600 transition-colors duration-500 ease-silk group-hover/digest:text-ochre"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M5 3h10a2 2 0 0 1 2 2v16l-7-3-7 3V5a2 2 0 0 1 2-2z" />
+                <path d="M8 7h6 M8 11h6 M8 15h4" />
+              </svg>
+              <div>
+                <div className="font-mono text-[9.5px] uppercase tracking-wider text-espresso-500">
+                  Weekly
+                </div>
+                <div className="font-serif text-[14px] font-medium text-espresso-900">
+                  Digest
+                </div>
+              </div>
+            </button>
           </div>
         </div>
       </header>

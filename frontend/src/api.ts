@@ -83,6 +83,42 @@ export async function fetchSessionDetails(
   return data;
 }
 
+export async function generateBrief(sessionId: string, repoId: string): Promise<string> {
+  const res = await fetch(`/api/sessions/${sessionId}/brief`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ repoId }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to generate brief');
+  return data.brief;
+}
+
+export async function extractDecisions(sessionId: string, repoId: string): Promise<string> {
+  const res = await fetch(`/api/sessions/${sessionId}/decisions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ repoId }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to extract decisions');
+  return data.decisions;
+}
+
+export async function fetchWeeklyDigest(
+  days = 7,
+  repoIds?: string[]
+): Promise<{ digest: string; count: number; capped: number }> {
+  const res = await fetch('/api/digest/weekly', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ days, repoIds }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to generate digest');
+  return data;
+}
+
 export async function fetchClaudeSettings(): Promise<Record<string, unknown>> {
   const res = await fetch('/api/claude-settings');
   return res.json();

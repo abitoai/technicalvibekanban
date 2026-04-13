@@ -43,7 +43,6 @@ export default function RepoSidebar({
                 aria-label="Open settings"
                 className="group/set relative grid h-10 w-10 place-items-center rounded-full border border-espresso-900/10 bg-cream-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] transition-all duration-500 ease-silk hover:border-espresso-900/20 hover:shadow-soft-sm active:scale-95"
               >
-                {/* Ultra-light gear — custom path, not Lucide */}
                 <svg
                   viewBox="0 0 24 24"
                   className="h-4 w-4 text-espresso-600 transition-transform duration-700 ease-silk group-hover/set:rotate-45"

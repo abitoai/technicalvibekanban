@@ -4,12 +4,14 @@ import type { Repo } from './types';
 import RepoSidebar from './components/RepoSidebar';
 import SessionBoard from './components/SessionBoard';
 import SettingsModal, { loadSettings, type Settings } from './components/SettingsModal';
+import WeeklyDigestModal from './components/WeeklyDigestModal';
 
 export default function App() {
   const [allRepos, setAllRepos] = useState<Repo[]>([]);
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [digestOpen, setDigestOpen] = useState(false);
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -97,6 +99,7 @@ export default function App() {
               skipPermissions={settings.skipPermissions}
               renameWordCount={settings.renameWordCount}
               onResumed={showToast}
+              onOpenDigest={() => setDigestOpen(true)}
             />
           ) : (
             <div className="flex h-full items-center justify-center">
@@ -122,6 +125,13 @@ export default function App() {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         onSettingsChange={setSettings}
+      />
+
+      <WeeklyDigestModal
+        open={digestOpen}
+        repos={repos}
+        currentRepoId={selectedRepoId}
+        onClose={() => setDigestOpen(false)}
       />
 
       {/* Toast — floating island */}

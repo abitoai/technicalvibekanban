@@ -15,6 +15,8 @@ export interface Session {
   created: string | null;
   modified: string | null;
   gitBranch: string | null;
+  brief: string | null;
+  decisions: string | null;
 }
 
 export const COLUMNS = ['backlog', 'todo', 'in_progress', 'human_review', 'agent_review', 'done'] as const;

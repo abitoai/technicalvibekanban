@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { fetchSessionDetails, type SessionDetails } from '../api';
+import { fetchSessionDetails, extractDecisions, generateBrief, type SessionDetails } from '../api';
 import type { Session } from '../types';
 
 interface Props {
@@ -8,23 +8,73 @@ interface Props {
   session: Session;
   repoId: string;
   onClose: () => void;
+  onUpdate?: () => void;
 }
 
-export default function SessionDetailsModal({ open, session, repoId, onClose }: Props) {
+export default function SessionDetailsModal({ open, session, repoId, onClose, onUpdate }: Props) {
   const [details, setDetails] = useState<SessionDetails | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [decisions, setDecisions] = useState<string | null>(null);
+  const [decisionsLoading, setDecisionsLoading] = useState(false);
+  const [decisionsError, setDecisionsError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [brief, setBrief] = useState<string | null>(null);
+  const [briefLoading, setBriefLoading] = useState(false);
+  const [briefError, setBriefError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setDetails(null);
     setError(null);
     setLoading(true);
+    setDecisions(session.decisions);
+    setDecisionsError(null);
+    setCopied(false);
+    setBrief(session.brief);
+    setBriefError(null);
     fetchSessionDetails(session.sessionId, repoId)
       .then((d) => setDetails(d))
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load'))
       .finally(() => setLoading(false));
-  }, [open, session.sessionId, repoId]);
+  }, [open, session.sessionId, repoId, session.decisions, session.brief]);
+
+  const handleBrief = async () => {
+    setBriefLoading(true);
+    setBriefError(null);
+    try {
+      const text = await generateBrief(session.sessionId, repoId);
+      setBrief(text);
+      onUpdate?.();
+    } catch (err) {
+      setBriefError(err instanceof Error ? err.message : 'Failed');
+    } finally {
+      setBriefLoading(false);
+    }
+  };
+
+  const handleExtract = async () => {
+    setDecisionsLoading(true);
+    setDecisionsError(null);
+    try {
+      const text = await extractDecisions(session.sessionId, repoId);
+      setDecisions(text);
+      onUpdate?.();
+    } catch (err) {
+      setDecisionsError(err instanceof Error ? err.message : 'Failed');
+    } finally {
+      setDecisionsLoading(false);
+    }
+  };
+
+  const handleCopy = async () => {
+    if (!decisions) return;
+    try {
+      await navigator.clipboard.writeText(decisions);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard denied */ }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -51,11 +101,11 @@ export default function SessionDetailsModal({ open, session, repoId, onClose }: 
       <div className="absolute inset-0 bg-espresso-900/40 backdrop-blur-2xl" />
 
       <div
-        className="relative w-full max-w-2xl animate-scale-in"
+        className="relative w-full max-w-[92vw] animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="bezel-shell shadow-soft-xl">
-          <div className="bezel-core max-h-[85vh] overflow-y-auto scrollbar-soft">
+          <div className="bezel-core max-h-[92vh] overflow-y-auto scrollbar-soft">
             {/* Header */}
             <div className="flex items-start justify-between px-8 pt-8 pb-5">
               <div className="min-w-0 flex-1 pr-4">
@@ -173,10 +223,126 @@ export default function SessionDetailsModal({ open, session, repoId, onClose }: 
                     </section>
                   )}
 
+                  {/* Resumer brief */}
+                  <section>
+                    <SectionHeader
+                      kicker="04 · Brief"
+                      title="Where you left off"
+                    />
+                    <p className="mt-2 font-serif text-[12.5px] italic text-espresso-500">
+                      A 2-sentence pickup brief — appears on the card.
+                    </p>
+
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={handleBrief}
+                        disabled={briefLoading}
+                        className="island-btn"
+                      >
+                        <span className="pl-0.5">
+                          {briefLoading ? 'Briefing…' : brief ? 'Re-brief' : 'Generate brief'}
+                        </span>
+                        <span className="nub">
+                          <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 5h10 M3 8h7 M3 11h9" />
+                          </svg>
+                        </span>
+                      </button>
+                    </div>
+
+                    {briefError && (
+                      <div className="mt-3 rounded-2xl border border-rose/30 bg-rose/5 px-4 py-3 text-[12px] text-rose">
+                        {briefError}
+                      </div>
+                    )}
+
+                    {brief && (
+                      <div className="mt-4 rounded-2xl border-l-2 border-ochre/40 bg-cream-50 px-4 py-3 font-serif text-[13.5px] italic leading-relaxed text-espresso-700">
+                        {brief}
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Key decisions */}
+                  <section>
+                    <SectionHeader
+                      kicker="05 · Distillation"
+                      title="Key decisions & learnings"
+                    />
+                    <p className="mt-2 font-serif text-[12.5px] italic text-espresso-500">
+                      Long-form writeup for pasting into your CLAUDE.md.
+                    </p>
+
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={handleExtract}
+                        disabled={decisionsLoading}
+                        className="island-btn"
+                      >
+                        <span className="pl-0.5">
+                          {decisionsLoading
+                            ? 'Distilling…'
+                            : decisions
+                            ? 'Re-extract'
+                            : 'Extract key decisions'}
+                        </span>
+                        <span className="nub">
+                          <svg
+                            viewBox="0 0 16 16"
+                            className="h-3.5 w-3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.25"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M8 2.5 L9.4 6.6 L13.5 8 L9.4 9.4 L8 13.5 L6.6 9.4 L2.5 8 L6.6 6.6 Z" />
+                          </svg>
+                        </span>
+                      </button>
+
+                      {decisions && (
+                        <button onClick={handleCopy} className="ghost-btn">
+                          <svg
+                            viewBox="0 0 16 16"
+                            className="h-3.5 w-3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.1"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            {copied ? (
+                              <path d="M3.5 8.5 L6.5 11.5 L12.5 5" />
+                            ) : (
+                              <>
+                                <rect x="4" y="4" width="9" height="10" rx="1.5" />
+                                <path d="M6 4V2.5a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1V12" />
+                              </>
+                            )}
+                          </svg>
+                          {copied ? 'Copied' : 'Copy markdown'}
+                        </button>
+                      )}
+                    </div>
+
+                    {decisionsError && (
+                      <div className="mt-3 rounded-2xl border border-rose/30 bg-rose/5 px-4 py-3 text-[12px] text-rose">
+                        {decisionsError}
+                      </div>
+                    )}
+
+                    {decisions && (
+                      <pre className="mt-4 max-h-80 overflow-y-auto scrollbar-soft whitespace-pre-wrap rounded-2xl border border-espresso-900/10 bg-cream-50 px-4 py-3 font-serif text-[12.5px] leading-relaxed text-espresso-800">
+                        {decisions}
+                      </pre>
+                    )}
+                  </section>
+
                   {/* Lineage */}
                   {(details.forkedFrom || details.children.length > 0) && (
                     <section>
-                      <SectionHeader kicker="04 · Lineage" title="Session chain" />
+                      <SectionHeader kicker="06 · Lineage" title="Session chain" />
                       <div className="mt-4 space-y-2">
                         {details.forkedFrom && (
                           <LineageRow

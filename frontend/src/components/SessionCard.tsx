@@ -133,6 +133,13 @@ export default function SessionCard({
             </button>
           )}
 
+          {/* Resumer brief — "where you left off" */}
+          {session.brief && (
+            <p className="mt-2 border-l-2 border-ochre/40 pl-2.5 font-serif text-[12.5px] italic leading-snug text-espresso-600 line-clamp-3">
+              {session.brief}
+            </p>
+          )}
+
           {/* Meta row */}
           <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-espresso-500">
             {timeAgo && (
@@ -241,6 +248,7 @@ export default function SessionCard({
         session={session}
         repoId={repoId}
         onClose={() => setDetailsOpen(false)}
+        onUpdate={onUpdate}
       />
     </article>
   );

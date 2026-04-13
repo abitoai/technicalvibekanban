@@ -78,6 +78,59 @@ function extractText(msg) {
   return '';
 }
 
+// Read every user/assistant text message in order as "User: ..." / "Assistant: ..." lines.
+async function readTranscript(filePath) {
+  const lines = [];
+  try {
+    const rl = createInterface({ input: createReadStream(filePath), crlfDelay: Infinity });
+    for await (const line of rl) {
+      try {
+        const obj = JSON.parse(line);
+        if (obj.type !== 'user' && obj.type !== 'assistant') continue;
+        const text = extractText(obj);
+        if (text) lines.push(`${obj.type === 'user' ? 'User' : 'Assistant'}: ${text}`);
+      } catch { /* skip malformed */ }
+    }
+  } catch { /* unreadable */ }
+  return lines;
+}
+
+// Call Anthropic's messages API. Returns the first text block's content or throws with a useful error.
+async function callAnthropic({ model, maxTokens, prompt, system }) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
+  const body = {
+    model,
+    max_tokens: maxTokens,
+    messages: [{ role: 'user', content: prompt }],
+  };
+  if (system) body.system = system;
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json();
+  if (!response.ok || !data.content?.[0]?.text) {
+    throw new Error(data.error?.message || `Anthropic returned ${response.status}`);
+  }
+  return data.content[0].text.trim();
+}
+
+// Merge new fields into a session's .meta.json sidecar.
+async function updateMeta(repoId, sessionId, patch) {
+  const metaPath = join(PROJECTS_DIR, repoId, `${sessionId}.meta.json`);
+  let meta = {};
+  try { meta = JSON.parse(await readFile(metaPath, 'utf-8')); } catch { /* new */ }
+  Object.assign(meta, patch);
+  await writeFile(metaPath, JSON.stringify(meta, null, 2));
+  return meta;
+}
+
 // --- ROUTES ---
 
 // GET /api/repos — list all repos with sessions
@@ -169,6 +222,8 @@ app.get('/api/repos/:repoId/sessions', async (req, res) => {
           created: indexed.created || null,
           modified: indexed.modified || null,
           gitBranch: indexed.gitBranch || null,
+          brief: meta.brief || null,
+          decisions: meta.decisions || null,
         });
       } else {
         // Parse the file for basic info
@@ -187,6 +242,8 @@ app.get('/api/repos/:repoId/sessions', async (req, res) => {
           created: timestamp,
           modified: fileStat.mtime.toISOString(),
           gitBranch: userMessages[0]?.gitBranch || null,
+          brief: meta.brief || null,
+          decisions: meta.decisions || null,
         });
       }
     }
@@ -462,6 +519,138 @@ app.post('/api/sessions/:sessionId/summarize', async (req, res) => {
     res.json({ summary });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/sessions/:sessionId/brief — short "where you left off" brief (Haiku, last turns)
+app.post('/api/sessions/:sessionId/brief', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { repoId } = req.body;
+    if (!repoId) return res.status(400).json({ error: 'repoId is required' });
+
+    const filePath = join(PROJECTS_DIR, repoId, `${sessionId}.jsonl`);
+    const allLines = await readTranscript(filePath);
+    if (allLines.length === 0) return res.status(400).json({ error: 'Session has no content yet' });
+
+    const tail = allLines.slice(-12).join('\n\n');
+    const prompt = `Below are the last turns of a Claude Code session. Write exactly 2 sentences describing where the session left off. First sentence: what was being worked on (be concrete — name the file/feature/bug). Second sentence: the immediate next step, blocker, or open question. No pleasantries, no meta-commentary, no "the user" or "the assistant" — write as if briefing the person who was doing the work.\n\n${tail}`;
+
+    const brief = await callAnthropic({
+      model: 'claude-haiku-4-5-20251001',
+      maxTokens: 200,
+      prompt,
+    });
+
+    await updateMeta(repoId, sessionId, { brief, briefGeneratedAt: new Date().toISOString() });
+    res.json({ brief });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// POST /api/sessions/:sessionId/decisions — long-form decisions/learnings writeup (Sonnet, full transcript)
+app.post('/api/sessions/:sessionId/decisions', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { repoId } = req.body;
+    if (!repoId) return res.status(400).json({ error: 'repoId is required' });
+
+    const filePath = join(PROJECTS_DIR, repoId, `${sessionId}.jsonl`);
+    const allLines = await readTranscript(filePath);
+    if (allLines.length === 0) return res.status(400).json({ error: 'Session has no content yet' });
+
+    const transcript = allLines.join('\n\n');
+    const prompt = `Below is a full Claude Code session transcript. Write a markdown writeup suitable for pasting into a CLAUDE.md file. Use these exact H2 headings:\n\n## Objective\n## Work done\n## Decisions\n## Learnings\n## Open questions\n\nIn Decisions, state each decision and its rationale (why that path, what alternatives were considered, what constraint forced it). Be concrete — name files, functions, approaches. Avoid marketing language. Write for the user's future self picking this up cold. Aim for 250-450 words total. No preamble, start directly with the first heading.\n\nTranscript:\n\n${transcript}`;
+
+    const decisions = await callAnthropic({
+      model: 'claude-sonnet-4-6',
+      maxTokens: 2000,
+      prompt,
+    });
+
+    await updateMeta(repoId, sessionId, { decisions, decisionsGeneratedAt: new Date().toISOString() });
+    res.json({ decisions });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// POST /api/digest/weekly — journal-style digest across all repos for the last N days
+app.post('/api/digest/weekly', async (req, res) => {
+  try {
+    const days = Math.max(1, Math.min(60, Number(req.body?.days) || 7));
+    const cutoff = Date.now() - days * 86_400_000;
+    const repoFilter = Array.isArray(req.body?.repoIds) && req.body.repoIds.length > 0
+      ? new Set(req.body.repoIds)
+      : null;
+
+    const entries = await readdir(PROJECTS_DIR, { withFileTypes: true });
+    const perSession = [];
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (repoFilter && !repoFilter.has(entry.name)) continue;
+      const dirPath = join(PROJECTS_DIR, entry.name);
+      let files = [];
+      try { files = await readdir(dirPath); } catch { continue; }
+      const repoPath = await getRepoPath(dirPath, entry.name);
+      const repoDisplayName = repoName(repoPath);
+
+      for (const f of files) {
+        if (!f.endsWith('.jsonl')) continue;
+        const sessionId = basename(f, '.jsonl');
+        const filePath = join(dirPath, f);
+        let s;
+        try { s = await stat(filePath); } catch { continue; }
+        if (s.mtimeMs < cutoff) continue;
+
+        // Meta
+        let meta = {};
+        try { meta = JSON.parse(await readFile(join(dirPath, `${sessionId}.meta.json`), 'utf-8')); } catch { /* none */ }
+
+        // First user message + last assistant message for flavor
+        const lines = await readTranscript(filePath);
+        if (lines.length === 0) continue;
+        const firstUser = lines.find(l => l.startsWith('User: ')) || '';
+        const lastAssistant = [...lines].reverse().find(l => l.startsWith('Assistant: ')) || '';
+
+        perSession.push({
+          repo: repoDisplayName,
+          title: meta.custom_name || firstUser.replace(/^User: /, '').slice(0, 100) || sessionId,
+          status: meta.status || 'backlog',
+          modified: new Date(s.mtimeMs).toISOString(),
+          messageCount: lines.length,
+          firstPrompt: firstUser.replace(/^User: /, '').slice(0, 400),
+          lastLine: lastAssistant.replace(/^Assistant: /, '').slice(0, 400),
+        });
+      }
+    }
+
+    if (perSession.length === 0) {
+      return res.json({ digest: `No sessions in the last ${days} day${days === 1 ? '' : 's'}.`, count: 0 });
+    }
+
+    perSession.sort((a, b) => new Date(b.modified) - new Date(a.modified));
+
+    // Cap the input — if thousands of sessions, trim to the most recent ~40 to keep tokens sane.
+    const capped = perSession.slice(0, 40);
+
+    const blocks = capped.map((s, i) => (
+      `### ${i + 1}. ${s.title}\n- Repo: ${s.repo}\n- Status: ${s.status}\n- Messages: ${s.messageCount}\n- Last active: ${s.modified}\n- First ask: ${s.firstPrompt}\n- Last line: ${s.lastLine}`
+    )).join('\n\n');
+
+    const prompt = `Below are summaries of Claude Code sessions the user worked on in the last ${days} day${days === 1 ? '' : 's'}, across every repo. Write a first-person journal entry (180-320 words) in the user's voice. Structure: what got shipped (Done status), what's still in progress, what got stuck or abandoned (Backlog with recent activity suggests exploration that stalled), and any patterns you notice across repos. Name specific repos, features, and files. Be honest and concrete — no platitudes, no "exciting progress." If little happened, say so plainly.\n\n${blocks}`;
+
+    const digest = await callAnthropic({
+      model: 'claude-sonnet-4-6',
+      maxTokens: 1500,
+      prompt,
+    });
+
+    res.json({ digest, count: perSession.length, capped: capped.length });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
   }
 });
 
