@@ -52,6 +52,37 @@ export async function summarizeSession(
   return data.summary;
 }
 
+export interface SessionDetails {
+  sessionId: string;
+  gitBranch: string | null;
+  cwd: string | null;
+  firstMessage: string | null;
+  lastMessage: string | null;
+  durationSeconds: number | null;
+  messageCount: number;
+  toolCounts: Record<string, number>;
+  touchedFileCount: number;
+  fileGroups: Array<{
+    dir: string;
+    count: number;
+    files: Array<{ file: string; reads: number; writes: number; edits: number }>;
+  }>;
+  forkedFrom: { sessionId: string; messageUuid: string } | null;
+  children: Array<{ sessionId: string; created: string | null }>;
+}
+
+export async function fetchSessionDetails(
+  sessionId: string,
+  repoId: string
+): Promise<SessionDetails> {
+  const res = await fetch(
+    `/api/sessions/${sessionId}/details?repoId=${encodeURIComponent(repoId)}`
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to load details');
+  return data;
+}
+
 export async function fetchClaudeSettings(): Promise<Record<string, unknown>> {
   const res = await fetch('/api/claude-settings');
   return res.json();

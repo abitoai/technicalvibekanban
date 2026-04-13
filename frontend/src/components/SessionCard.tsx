@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { resumeSession, summarizeSession, updateSessionMeta } from '../api';
 import type { Session } from '../types';
+import SessionDetailsModal from './SessionDetailsModal';
 
 interface Props {
   session: Session;
@@ -23,6 +24,7 @@ export default function SessionCard({
   const [resuming, setResuming] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const displayName =
@@ -199,6 +201,29 @@ export default function SessionCard({
               </svg>
               {summarizing ? 'Renaming…' : 'AI rename'}
             </button>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setDetailsOpen(true);
+              }}
+              title="Expand details"
+              aria-label="Expand details"
+              className="ml-auto grid h-8 w-8 shrink-0 place-items-center rounded-full border border-espresso-900/10 bg-cream-50 text-espresso-500 transition-all duration-500 ease-silk hover:text-espresso-800 hover:shadow-soft-sm active:scale-95"
+            >
+              <svg
+                viewBox="0 0 16 16"
+                className="h-3.5 w-3.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M3 3h4 M3 3v4 M13 13h-4 M13 13v-4" />
+              </svg>
+            </button>
           </div>
 
           {/* Session id — footer */}
@@ -210,6 +235,13 @@ export default function SessionCard({
           </div>
         </div>
       </div>
+
+      <SessionDetailsModal
+        open={detailsOpen}
+        session={session}
+        repoId={repoId}
+        onClose={() => setDetailsOpen(false)}
+      />
     </article>
   );
 }

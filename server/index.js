@@ -199,6 +199,124 @@ app.get('/api/repos/:repoId/sessions', async (req, res) => {
   }
 });
 
+// GET /api/sessions/:sessionId/details — deep inspection of a session
+const FILE_TOOLS = new Set(['Read', 'Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+
+app.get('/api/sessions/:sessionId/details', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { repoId } = req.query;
+    if (!repoId) return res.status(400).json({ error: 'repoId is required' });
+
+    const dirPath = join(PROJECTS_DIR, repoId);
+    const filePath = join(dirPath, `${sessionId}.jsonl`);
+
+    const toolCounts = {};
+    const touchedFiles = new Map(); // file_path -> { reads, writes, edits }
+    let firstTimestamp = null;
+    let lastTimestamp = null;
+    let messageCount = 0;
+    let forkedFrom = null;
+    let gitBranch = null;
+    let cwd = null;
+
+    const rl = createInterface({ input: createReadStream(filePath), crlfDelay: Infinity });
+    for await (const line of rl) {
+      let obj;
+      try { obj = JSON.parse(line); } catch { continue; }
+
+      if (obj.forkedFrom && !forkedFrom) forkedFrom = obj.forkedFrom;
+      if (obj.gitBranch && !gitBranch) gitBranch = obj.gitBranch;
+      if (obj.cwd && !cwd) cwd = obj.cwd;
+      if (obj.timestamp) {
+        if (!firstTimestamp) firstTimestamp = obj.timestamp;
+        lastTimestamp = obj.timestamp;
+      }
+      if (obj.type === 'user' || obj.type === 'assistant') messageCount++;
+
+      if (obj.type !== 'assistant') continue;
+      const content = obj.message?.content;
+      if (!Array.isArray(content)) continue;
+
+      for (const block of content) {
+        if (block?.type !== 'tool_use') continue;
+        const name = block.name || 'Unknown';
+        toolCounts[name] = (toolCounts[name] || 0) + 1;
+
+        if (FILE_TOOLS.has(name)) {
+          const filePathInput = block.input?.file_path || block.input?.notebook_path;
+          if (filePathInput) {
+            const entry = touchedFiles.get(filePathInput) || { reads: 0, writes: 0, edits: 0 };
+            if (name === 'Read') entry.reads++;
+            else if (name === 'Write') entry.writes++;
+            else entry.edits++;
+            touchedFiles.set(filePathInput, entry);
+          }
+        }
+      }
+    }
+
+    // Group files by directory
+    const byDir = new Map();
+    for (const [fp, counts] of touchedFiles) {
+      const normalized = fp.replace(/\\/g, '/');
+      const lastSlash = normalized.lastIndexOf('/');
+      const dir = lastSlash >= 0 ? normalized.slice(0, lastSlash) : '.';
+      const file = lastSlash >= 0 ? normalized.slice(lastSlash + 1) : normalized;
+      if (!byDir.has(dir)) byDir.set(dir, []);
+      byDir.get(dir).push({ file, ...counts });
+    }
+    const fileGroups = [...byDir.entries()]
+      .map(([dir, files]) => ({ dir, count: files.length, files: files.sort((a, b) => a.file.localeCompare(b.file)) }))
+      .sort((a, b) => b.count - a.count);
+
+    // Find children: any session in this repo whose first data line forkedFrom.sessionId === ours
+    const children = [];
+    try {
+      const repoFiles = await readdir(dirPath);
+      for (const f of repoFiles) {
+        if (!f.endsWith('.jsonl') || f === `${sessionId}.jsonl`) continue;
+        const childId = basename(f, '.jsonl');
+        try {
+          const childRl = createInterface({ input: createReadStream(join(dirPath, f)), crlfDelay: Infinity });
+          let checked = 0;
+          for await (const cline of childRl) {
+            if (++checked > 3) break;
+            try {
+              const cobj = JSON.parse(cline);
+              if (cobj.forkedFrom?.sessionId === sessionId) {
+                children.push({ sessionId: childId, created: cobj.timestamp || null });
+                break;
+              }
+            } catch { /* skip */ }
+          }
+        } catch { /* unreadable */ }
+      }
+    } catch { /* no dir */ }
+
+    const durationSeconds = firstTimestamp && lastTimestamp
+      ? Math.round((new Date(lastTimestamp) - new Date(firstTimestamp)) / 1000)
+      : null;
+
+    res.json({
+      sessionId,
+      gitBranch,
+      cwd,
+      firstMessage: firstTimestamp,
+      lastMessage: lastTimestamp,
+      durationSeconds,
+      messageCount,
+      toolCounts,
+      touchedFileCount: touchedFiles.size,
+      fileGroups,
+      forkedFrom,
+      children,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PUT /api/sessions/:sessionId/meta — update session metadata
 app.put('/api/sessions/:sessionId/meta', async (req, res) => {
   try {
