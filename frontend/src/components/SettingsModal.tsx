@@ -6,11 +6,13 @@ const STORAGE_KEY = 'session-browser-settings';
 export interface Settings {
   excludePatterns: string[];
   skipPermissions: boolean;
+  renameWordCount: number;
 }
 
 const DEFAULT_SETTINGS: Settings = {
   excludePatterns: ['worktrees', 'paperclip'],
   skipPermissions: true,
+  renameWordCount: 5,
 };
 
 export function loadSettings(): Settings {
@@ -79,6 +81,14 @@ export default function SettingsModal({ open, onClose, onSettingsChange }: Props
 
   const toggleSkipPermissions = () => {
     const updated = { ...settings, skipPermissions: !settings.skipPermissions };
+    setSettings(updated);
+    saveSettings(updated);
+    onSettingsChange(updated);
+  };
+
+  const setRenameWordCount = (value: number) => {
+    const clamped = Math.max(1, Math.min(20, Math.floor(value) || 1));
+    const updated = { ...settings, renameWordCount: clamped };
     setSettings(updated);
     saveSettings(updated);
     onSettingsChange(updated);
@@ -233,10 +243,31 @@ export default function SettingsModal({ open, onClose, onSettingsChange }: Props
                 </label>
               </section>
 
+              {/* AI rename length */}
+              <section>
+                <SectionHeader
+                  kicker="03 · Distillation"
+                  title="AI rename length"
+                  subtitle="The max number of words Haiku returns when you click AI rename. Existing names aren't touched — this only affects future renames."
+                />
+
+                <div className="mt-4 flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={settings.renameWordCount}
+                    onChange={(e) => setRenameWordCount(parseInt(e.target.value) || 1)}
+                    className="field-input w-24"
+                  />
+                  <span className="text-[13px] text-espresso-500">words max</span>
+                </div>
+              </section>
+
               {/* Exclude patterns */}
               <section>
                 <SectionHeader
-                  kicker="03 · Visibility"
+                  kicker="04 · Visibility"
                   title="Hidden repositories"
                   subtitle="Repos whose directory name contains any of these patterns will be tucked away from the sidebar."
                 />

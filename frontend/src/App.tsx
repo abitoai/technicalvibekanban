@@ -95,6 +95,7 @@ export default function App() {
             <SessionBoard
               repo={selectedRepo}
               skipPermissions={settings.skipPermissions}
+              renameWordCount={settings.renameWordCount}
               onResumed={showToast}
             />
           ) : (

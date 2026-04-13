@@ -6,6 +6,7 @@ interface Props {
   session: Session;
   repoId: string;
   skipPermissions: boolean;
+  renameWordCount: number;
   onResumed: (message: string) => void;
   onUpdate: () => void;
 }
@@ -14,6 +15,7 @@ export default function SessionCard({
   session,
   repoId,
   skipPermissions,
+  renameWordCount,
   onResumed,
   onUpdate,
 }: Props) {
@@ -74,7 +76,7 @@ export default function SessionCard({
     e.stopPropagation();
     setSummarizing(true);
     try {
-      await summarizeSession(session.sessionId, repoId);
+      await summarizeSession(session.sessionId, repoId, renameWordCount);
       onUpdate();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to rename';

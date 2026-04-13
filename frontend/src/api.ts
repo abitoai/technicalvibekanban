@@ -39,12 +39,13 @@ export async function resumeSession(
 
 export async function summarizeSession(
   sessionId: string,
-  repoId: string
+  repoId: string,
+  maxWords: number
 ): Promise<string> {
   const res = await fetch(`/api/sessions/${sessionId}/summarize`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionId, repoId }),
+    body: JSON.stringify({ sessionId, repoId, maxWords }),
   });
   const data = await res.json();
   if (data.error) throw new Error(data.error);

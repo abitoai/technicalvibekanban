@@ -278,8 +278,9 @@ app.post('/api/sessions/:sessionId/resume', async (req, res) => {
 // POST /api/sessions/:sessionId/summarize — generate AI summary
 app.post('/api/sessions/:sessionId/summarize', async (req, res) => {
   try {
-    const { sessionId, repoId } = req.body;
+    const { sessionId, repoId, maxWords } = req.body;
     if (!repoId) return res.status(400).json({ error: 'repoId is required' });
+    const wordLimit = Math.max(1, Math.min(20, Math.floor(Number(maxWords)) || 5));
 
     const filePath = join(PROJECTS_DIR, repoId, `${sessionId}.jsonl`);
 
@@ -313,10 +314,10 @@ app.post('/api/sessions/:sessionId/summarize', async (req, res) => {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 30,
+        max_tokens: Math.max(30, wordLimit * 6),
         messages: [{
           role: 'user',
-          content: `Below is a conversation transcript. Respond with 5 or fewer words describing the main point of this chat. No punctuation, no quotes, no prefix — just the title itself.\n\n${transcript}`,
+          content: `Below is a conversation transcript. Respond with ${wordLimit} or fewer words describing what was actually done in the chat. Not a complete sentence — just the things that were done, like a terse label. No punctuation, no quotes, no prefix.\n\n${transcript}`,
         }],
       }),
     });

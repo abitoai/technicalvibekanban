@@ -13,10 +13,11 @@ import SessionCard from './SessionCard';
 interface Props {
   repo: Repo;
   skipPermissions: boolean;
+  renameWordCount: number;
   onResumed: (message: string) => void;
 }
 
-export default function SessionBoard({ repo, skipPermissions, onResumed }: Props) {
+export default function SessionBoard({ repo, skipPermissions, renameWordCount, onResumed }: Props) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -170,6 +171,7 @@ export default function SessionBoard({ repo, skipPermissions, onResumed }: Props
                                       session={session}
                                       repoId={repo.id}
                                       skipPermissions={skipPermissions}
+                                      renameWordCount={renameWordCount}
                                       onResumed={onResumed}
                                       onUpdate={loadSessions}
                                     />
