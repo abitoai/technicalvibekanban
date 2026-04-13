@@ -1,6 +1,10 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import { reconcile } from './indexer/reconcile.js';
+import { getStatus as getIndexStatus } from './indexer/store.js';
+import { search as indexSearch, retrieve as indexRetrieve } from './indexer/search.js';
+import { invalidateBM25 } from './indexer/bm25.js';
 import { readdir, readFile, writeFile, stat } from 'fs/promises';
 import { join, basename } from 'path';
 import { homedir } from 'os';
@@ -654,6 +658,69 @@ app.post('/api/digest/weekly', async (req, res) => {
   }
 });
 
+// --- Vector index endpoints ---
+
+// POST /api/index/reconcile — sync vector index with disk. Body: { dryRun?: boolean }
+app.post('/api/index/reconcile', async (req, res) => {
+  try {
+    const dryRun = req.body?.dryRun === true;
+    const report = await reconcile({ dryRun });
+    if (!dryRun) invalidateBM25();
+    res.json(report);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/index/search — hybrid search. Body: { query, k?, mode?, kind? }
+app.post('/api/index/search', async (req, res) => {
+  try {
+    const { query, k = 10, mode = 'hybrid', kind = null } = req.body || {};
+    if (!query?.trim()) return res.status(400).json({ error: 'query is required' });
+    const result = await indexSearch(query, { k, mode, kind });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/index/ask — retrieval-augmented Q&A over indexed sessions. Body: { question, k? }
+app.post('/api/index/ask', async (req, res) => {
+  try {
+    const { question, k = 8 } = req.body || {};
+    if (!question?.trim()) return res.status(400).json({ error: 'question is required' });
+
+    const { contextText, citations } = await indexRetrieve(question, k);
+    if (citations.length === 0) {
+      return res.json({
+        answer: 'No indexed sessions matched the question. Try reconciling the index first or rephrasing.',
+        citations: [],
+      });
+    }
+
+    const prompt = `You are answering a question using excerpts from the user's past Claude Code sessions. Ground your answer strictly in the provided excerpts. Cite sources using [N] matching the excerpt headers. If the excerpts don't contain enough information to answer, say so plainly rather than guessing.\n\nQuestion: ${question}\n\nExcerpts:\n\n${contextText}\n\nAnswer in concise markdown, with citations like [1] inline.`;
+
+    const answer = await callAnthropic({
+      model: 'claude-sonnet-4-6',
+      maxTokens: 1500,
+      prompt,
+    });
+
+    res.json({ answer, citations });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// GET /api/index/status — counts + metadata for the current index
+app.get('/api/index/status', async (req, res) => {
+  try {
+    res.json(await getIndexStatus());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const CLAUDE_SETTINGS_PATH = join(CLAUDE_DIR, 'settings.json');
 
 // GET /api/claude-settings — read Claude Code settings
@@ -685,4 +752,11 @@ app.put('/api/claude-settings', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Session browser server running on http://localhost:${PORT}`);
   console.log(`Scanning sessions from: ${PROJECTS_DIR}`);
+
+  if (process.env.AUTO_RECONCILE === 'true') {
+    console.log('[index] AUTO_RECONCILE=true — running reconcile on startup');
+    reconcile().catch((err) => console.error('[index] startup reconcile failed:', err.message));
+  } else {
+    console.log('[index] AUTO_RECONCILE=false — call POST /api/index/reconcile to update');
+  }
 });

@@ -119,6 +119,101 @@ export async function fetchWeeklyDigest(
   return data;
 }
 
+// --- Vector / search index ---
+
+export interface IndexStatus {
+  path: string;
+  version: number;
+  embedder: string | null;
+  dim: number | null;
+  sessionCount: number;
+  chunkCount: number;
+  sessionChunks: number;
+  turnChunks: number;
+}
+
+export async function fetchIndexStatus(): Promise<IndexStatus> {
+  const res = await fetch('/api/index/status');
+  return res.json();
+}
+
+export interface ReconcileReport {
+  dryRun: boolean;
+  embedder: string;
+  dim: number;
+  onDisk: number;
+  inIndex: number;
+  plan: { new: number; appended: number; rewritten: number; noop: number; deleted: number };
+  embeddedChunks: number;
+  deletedChunks: number;
+  errors: string[];
+  durationMs: number;
+}
+
+export async function reconcileIndex(dryRun = false): Promise<ReconcileReport> {
+  const res = await fetch('/api/index/reconcile', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dryRun }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Reconcile failed');
+  return data;
+}
+
+export type SearchMode = 'hybrid' | 'vector' | 'bm25';
+
+export interface SearchHit {
+  id: string;
+  sessionId: string;
+  repoId: string;
+  kind: 'session' | 'turn';
+  turnIndex: number | null;
+  score: number;
+  snippet: string;
+}
+
+export async function searchIndex(
+  query: string,
+  opts: { k?: number; mode?: SearchMode; kind?: 'session' | 'turn' | null } = {}
+): Promise<{ hits: SearchHit[]; mode: SearchMode; total: number }> {
+  const res = await fetch('/api/index/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query,
+      k: opts.k ?? 15,
+      mode: opts.mode ?? 'hybrid',
+      kind: opts.kind ?? null,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Search failed');
+  return data;
+}
+
+export interface Citation {
+  n: number;
+  sessionId: string;
+  repoId: string;
+  kind: 'session' | 'turn';
+  snippet: string;
+}
+
+export async function askIndex(
+  question: string,
+  k = 8
+): Promise<{ answer: string; citations: Citation[] }> {
+  const res = await fetch('/api/index/ask', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question, k }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Ask failed');
+  return data;
+}
+
 export async function fetchClaudeSettings(): Promise<Record<string, unknown>> {
   const res = await fetch('/api/claude-settings');
   return res.json();

@@ -5,6 +5,7 @@ import RepoSidebar from './components/RepoSidebar';
 import SessionBoard from './components/SessionBoard';
 import SettingsModal, { loadSettings, type Settings } from './components/SettingsModal';
 import WeeklyDigestModal from './components/WeeklyDigestModal';
+import SearchModal from './components/SearchModal';
 
 export default function App() {
   const [allRepos, setAllRepos] = useState<Repo[]>([]);
@@ -12,6 +13,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [digestOpen, setDigestOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -89,6 +91,7 @@ export default function App() {
           selectedRepoId={selectedRepoId}
           onSelect={setSelectedRepoId}
           onOpenSettings={() => setSettingsOpen(true)}
+          onOpenSearch={() => setSearchOpen(true)}
           loading={loading}
         />
 
@@ -132,6 +135,15 @@ export default function App() {
         repos={repos}
         currentRepoId={selectedRepoId}
         onClose={() => setDigestOpen(false)}
+      />
+
+      <SearchModal
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onOpenSession={(repoId) => {
+          setSelectedRepoId(repoId);
+          setSearchOpen(false);
+        }}
       />
 
       {/* Toast — floating island */}

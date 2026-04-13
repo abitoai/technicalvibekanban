@@ -5,6 +5,7 @@ interface Props {
   selectedRepoId: string | null;
   onSelect: (id: string) => void;
   onOpenSettings: () => void;
+  onOpenSearch: () => void;
   loading: boolean;
 }
 
@@ -17,6 +18,7 @@ export default function RepoSidebar({
   selectedRepoId,
   onSelect,
   onOpenSettings,
+  onOpenSearch,
   loading,
 }: Props) {
   return (
@@ -28,8 +30,7 @@ export default function RepoSidebar({
           <header className="relative px-7 pt-8 pb-6">
             <div className="flex items-start justify-between">
               <div>
-                <span className="eyebrow">Studio · V. 01</span>
-                <h1 className="text-display mt-3 text-[2rem] text-espresso-900">
+                <h1 className="text-display text-[2rem] text-espresso-900">
                   Atelier
                 </h1>
                 <p className="mt-1 font-serif text-[13px] italic text-espresso-500">
@@ -37,25 +38,47 @@ export default function RepoSidebar({
                 </p>
               </div>
 
-              <button
-                onClick={onOpenSettings}
-                title="Studio preferences"
-                aria-label="Open settings"
-                className="group/set relative grid h-10 w-10 place-items-center rounded-full border border-espresso-900/10 bg-cream-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] transition-all duration-500 ease-silk hover:border-espresso-900/20 hover:shadow-soft-sm active:scale-95"
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  className="h-4 w-4 text-espresso-600 transition-transform duration-700 ease-silk group-hover/set:rotate-45"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.1"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+              <div className="flex gap-2">
+                <button
+                  onClick={onOpenSearch}
+                  title="Search & ask across all sessions"
+                  aria-label="Open search"
+                  className="grid h-10 w-10 place-items-center rounded-full border border-espresso-900/10 bg-cream-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] transition-all duration-500 ease-silk hover:border-espresso-900/20 hover:shadow-soft-sm active:scale-95"
                 >
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M12 2.5v2.2M12 19.3v2.2M4.5 4.5l1.55 1.55M17.95 17.95l1.55 1.55M2.5 12h2.2M19.3 12h2.2M4.5 19.5l1.55-1.55M17.95 6.05l1.55-1.55" />
-                </svg>
-              </button>
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4 text-espresso-600"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="M21 21l-4.3-4.3" />
+                  </svg>
+                </button>
+
+                <button
+                  onClick={onOpenSettings}
+                  title="Studio preferences"
+                  aria-label="Open settings"
+                  className="group/set relative grid h-10 w-10 place-items-center rounded-full border border-espresso-900/10 bg-cream-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] transition-all duration-500 ease-silk hover:border-espresso-900/20 hover:shadow-soft-sm active:scale-95"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4 text-espresso-600 transition-transform duration-700 ease-silk group-hover/set:rotate-45"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.1"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M12 2.5v2.2M12 19.3v2.2M4.5 4.5l1.55 1.55M17.95 17.95l1.55 1.55M2.5 12h2.2M19.3 12h2.2M4.5 19.5l1.55-1.55M17.95 6.05l1.55-1.55" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </header>
 
