@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   searchIndex,
   askIndex,
+  resumeSession,
   type SearchHit,
   type SearchMode,
   type Citation,
@@ -12,11 +13,13 @@ type Tab = 'search' | 'ask';
 
 interface Props {
   open: boolean;
+  skipPermissions: boolean;
   onClose: () => void;
   onOpenSession?: (repoId: string, sessionId: string) => void;
+  onResumed: (message: string) => void;
 }
 
-export default function SearchModal({ open, onClose, onOpenSession }: Props) {
+export default function SearchModal({ open, skipPermissions, onClose, onOpenSession, onResumed }: Props) {
   const [tab, setTab] = useState<Tab>('search');
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<SearchMode>('hybrid');
@@ -25,7 +28,21 @@ export default function SearchModal({ open, onClose, onOpenSession }: Props) {
   const [citations, setCitations] = useState<Citation[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resumingId, setResumingId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleResume = async (sessionId: string, repoId: string) => {
+    setResumingId(sessionId);
+    try {
+      const { command } = await resumeSession(sessionId, repoId, skipPermissions);
+      onResumed(`${command} — copied`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to resume';
+      onResumed(`Resume failed: ${msg}`);
+    } finally {
+      setResumingId(null);
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -204,30 +221,50 @@ export default function SearchModal({ open, onClose, onOpenSession }: Props) {
                   <ul className="space-y-2">
                     {hits.map((h) => (
                       <li key={h.id}>
-                        <button
-                          onClick={() => onOpenSession?.(h.repoId, h.sessionId)}
-                          className="group/hit w-full rounded-2xl border border-espresso-900/5 bg-cream-50 px-4 py-3 text-left transition-all duration-500 ease-silk hover:border-espresso-900/20 hover:shadow-soft-sm active:scale-[0.995]"
-                        >
+                        <div className="rounded-2xl border border-espresso-900/5 bg-cream-50 px-4 py-3 transition-all duration-500 ease-silk hover:border-espresso-900/20 hover:shadow-soft-sm">
                           <div className="mb-1.5 flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
                               <span className={[
-                                'rounded-full px-2 py-0.5 font-mono text-[9.5px] uppercase tracking-wider',
+                                'shrink-0 rounded-full px-2 py-0.5 font-mono text-[9.5px] uppercase tracking-wider',
                                 h.kind === 'session' ? 'bg-ochre/20 text-ochre' : 'bg-espresso-900/5 text-espresso-500',
                               ].join(' ')}>
                                 {h.kind}{h.kind === 'turn' && h.turnIndex !== null ? ` #${h.turnIndex}` : ''}
                               </span>
-                              <code className="font-mono text-[10.5px] text-espresso-500">
+                              <code className="truncate font-mono text-[10.5px] text-espresso-500">
                                 {h.sessionId.slice(0, 8)} · {h.repoId.slice(0, 32)}
                               </code>
                             </div>
-                            <span className="font-mono text-[10px] text-espresso-400">
+                            <span className="shrink-0 font-mono text-[10px] text-espresso-400">
                               {h.score.toFixed(3)}
                             </span>
                           </div>
                           <p className="font-serif text-[13px] leading-snug text-espresso-800 line-clamp-3">
                             {h.snippet}
                           </p>
-                        </button>
+                          <div className="mt-3 flex items-center gap-2">
+                            <button
+                              onClick={() => handleResume(h.sessionId, h.repoId)}
+                              disabled={resumingId === h.sessionId}
+                              className="island-btn"
+                            >
+                              <span className="pl-0.5">
+                                {resumingId === h.sessionId ? 'Opening…' : 'Resume'}
+                              </span>
+                              <span className="nub">
+                                <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M4 12 L12 4" />
+                                  <path d="M6 4h6v6" />
+                                </svg>
+                              </span>
+                            </button>
+                            <button
+                              onClick={() => onOpenSession?.(h.repoId, h.sessionId)}
+                              className="ghost-btn"
+                            >
+                              Open in board
+                            </button>
+                          </div>
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -248,11 +285,8 @@ export default function SearchModal({ open, onClose, onOpenSession }: Props) {
                       <ul className="space-y-1.5">
                         {citations.map((c) => (
                           <li key={c.n}>
-                            <button
-                              onClick={() => onOpenSession?.(c.repoId, c.sessionId)}
-                              className="flex w-full items-start gap-3 rounded-2xl border border-espresso-900/5 bg-cream-50 px-4 py-2.5 text-left transition-all duration-500 ease-silk hover:border-espresso-900/20"
-                            >
-                              <span className="shrink-0 rounded-full bg-ochre/20 px-2 py-0.5 font-mono text-[10px] text-ochre">
+                            <div className="flex items-start gap-3 rounded-2xl border border-espresso-900/5 bg-cream-50 px-4 py-2.5 transition-all duration-500 ease-silk hover:border-espresso-900/20">
+                              <span className="mt-0.5 shrink-0 rounded-full bg-ochre/20 px-2 py-0.5 font-mono text-[10px] text-ochre">
                                 [{c.n}]
                               </span>
                               <div className="min-w-0 flex-1">
@@ -263,7 +297,30 @@ export default function SearchModal({ open, onClose, onOpenSession }: Props) {
                                   {c.snippet}
                                 </p>
                               </div>
-                            </button>
+                              <div className="flex shrink-0 flex-col items-end gap-1.5">
+                                <button
+                                  onClick={() => handleResume(c.sessionId, c.repoId)}
+                                  disabled={resumingId === c.sessionId}
+                                  className="island-btn"
+                                >
+                                  <span className="pl-0.5">
+                                    {resumingId === c.sessionId ? 'Opening…' : 'Resume'}
+                                  </span>
+                                  <span className="nub">
+                                    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M4 12 L12 4" />
+                                      <path d="M6 4h6v6" />
+                                    </svg>
+                                  </span>
+                                </button>
+                                <button
+                                  onClick={() => onOpenSession?.(c.repoId, c.sessionId)}
+                                  className="text-[10.5px] text-espresso-500 transition-colors duration-300 ease-silk hover:text-espresso-800"
+                                >
+                                  Open in board →
+                                </button>
+                              </div>
+                            </div>
                           </li>
                         ))}
                       </ul>

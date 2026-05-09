@@ -139,6 +139,8 @@ export default function App() {
 
       <SearchModal
         open={searchOpen}
+        skipPermissions={settings.skipPermissions}
+        onResumed={showToast}
         onClose={() => setSearchOpen(false)}
         onOpenSession={(repoId) => {
           setSelectedRepoId(repoId);
