@@ -1,0 +1,7 @@
+﻿TRANSCRIPT.json filter=git-crypt diff=git-crypt
+TRANSCRIPT_SUMMARY.md filter=git-crypt diff=git-crypt
+CONSENSUS.json filter=git-crypt diff=git-crypt
+KNOWLEDGE.md filter=git-crypt diff=git-crypt
+DECISIONS.md filter=git-crypt diff=git-crypt
+STYLING.md filter=git-crypt diff=git-crypt
+DEAD_ENDS.md filter=git-crypt diff=git-crypt
